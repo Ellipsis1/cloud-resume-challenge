@@ -36,10 +36,33 @@ public class VisitorCounterHandler implements RequestHandler<APIGatewayProxyRequ
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent input, Context context) {
-        context.getLogger().log("Processing request: " + input.getHttpMethod() + " " + input.getPath());
+        // Debug logging
+        context.getLogger().log("=== DEBUG INFO ===");
+        context.getLogger().log("Input object: " + (input != null ? "not null" : "NULL"));
+        if (input != null) {
+            context.getLogger().log("HTTP Method: " + input.getHttpMethod());
+            context.getLogger().log("Path: " + input.getPath());
+            context.getLogger().log("Resource: " + input.getResource());
+            context.getLogger().log("Headers: " + input.getHeaders());
+        }
+        context.getLogger().log("==================");
 
         try {
+            // If input is null, create a default response
+            if (input == null) {
+                context.getLogger().log("Input is null, treating as POST request");
+                return handleIncrementVisitorCount(context);
+            }
+
             String httpMethod = input.getHttpMethod();
+
+            // Handle null httpMethod from API Gateway
+            if (httpMethod == null) {
+                context.getLogger().log("HTTP method is null, defaulting to POST");
+                httpMethod = "POST";
+            }
+
+            context.getLogger().log("Processing method: " + httpMethod);
 
             switch (httpMethod.toUpperCase()) {
                 case "GET":
@@ -54,7 +77,8 @@ public class VisitorCounterHandler implements RequestHandler<APIGatewayProxyRequ
 
         } catch (Exception e) {
             context.getLogger().log("Error: " + e.getMessage());
-            return createErrorResponse(500, "Internal server error");
+            e.printStackTrace();
+            return createErrorResponse(500, "Internal server error: " + e.getMessage());
         }
     }
 
