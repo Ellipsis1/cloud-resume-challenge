@@ -125,14 +125,14 @@ POST /prod/visitor-count
 }
 ```
 
-## 🔒 Security
+##  Security
 
 - **HTTPS Only** - All traffic encrypted via CloudFront
 - **CORS Configured** - Proper cross-origin resource sharing
 - **IAM Permissions** - Least privilege access for Lambda
 - **Input Validation** - Sanitized API requests
 
-## 💰 Cost Analysis
+##  Cost Analysis
 
 Monthly costs (estimated):
 - **S3 Storage**: ~$0.01 (static files)
