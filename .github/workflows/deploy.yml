@@ -1,0 +1,139 @@
+name: Deploy Cloud Resume Challenge
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  S3_BUCKET: bluellipsis.com
+  LAMBDA_FUNCTION_NAME: resume-visitor-counter
+  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test Backend
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Cache Maven dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        
+    - name: Run tests
+      run: |
+        cd backend
+        mvn clean test
+        
+    - name: Build JAR
+      run: |
+        cd backend
+        mvn clean package -DskipTests
+        
+    - name: Upload JAR artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: lambda-jar
+        path: backend/target/resume-api-lightweight.jar
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    name: Deploy Frontend
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Sync frontend to S3
+      run: |
+        aws s3 sync frontend/ s3://${{ env.S3_BUCKET }} --delete
+        
+    - name: Invalidate CloudFront cache
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ env.CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    name: Deploy Backend
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Download JAR artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: lambda-jar
+        
+    - name: Update Lambda function
+      run: |
+        aws lambda update-function-code \
+          --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+          --zip-file fileb://resume-api-lightweight.jar
+          
+    - name: Wait for Lambda update to complete
+      run: |
+        aws lambda wait function-updated \
+          --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+
+  integration-test:
+    runs-on: ubuntu-latest
+    name: Integration Test
+    needs: [deploy-frontend, deploy-backend]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Test API endpoint
+      run: |
+        # Test the visitor counter API
+        RESPONSE=$(curl -s -X POST https://6xq40rciya.execute-api.us-east-1.amazonaws.com/prod/visitor-count)
+        echo "API Response: $RESPONSE"
+        
+        # Parse response and check if count is a number
+        COUNT=$(echo $RESPONSE | jq -r '.body | fromjson | .count')
+        if [[ $COUNT =~ ^[0-9]+$ ]]; then
+          echo "✅ API test passed - Visitor count: $COUNT"
+        else
+          echo "❌ API test failed - Invalid response"
+          exit 1
+        fi
+        
+    - name: Test website accessibility
+      run: |
+        # Test if website loads
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://bluellipsis.com)
+        if [ $STATUS -eq 200 ]; then
+          echo "✅ Website test passed - Status: $STATUS"
+        else
+          echo "❌ Website test failed - Status: $STATUS"
+          exit 1
+        fi
