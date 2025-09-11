@@ -10,7 +10,7 @@ Building a cloud-native resume website using AWS services and Java Spring Boot.
 - **CI/CD**: GitHub Actions
 
 ## Live Site
-🔗 [bluellipsis.com](https://bluellipsis.com) (coming soon)
+🔗 [bluellipsis.com](https://bluellipsis.com)
 
 ## Progress
 - [x] Frontend development

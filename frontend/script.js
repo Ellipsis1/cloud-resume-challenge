@@ -226,7 +226,7 @@ window.addEventListener('load', () => {
 // Utility function to update API endpoint when backend is ready
 function configureAPI(endpoint) {
     if (window.visitorCounter) {
-        window.visitorCounter.setApiEndpoint(endpoint);
+        window.visitorCounter.setApiEndpoint('https://6xq40rciya.execute-api.us-east-1.amazonaws.com/prod');
         // Immediately try to update count
         window.visitorCounter.updateVisitorCount();
     }
