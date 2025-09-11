@@ -2,16 +2,27 @@
 const API_ENDPOINT = 'https://6xq40rciya.execute-api.us-east-1.amazonaws.com/prod/visitor-count';
 
 /**
- * Update visitor count by calling the Lambda API
+ * Update visitor count with client-side caching for instant loading
  */
 async function updateVisitorCount() {
-    try {
-        // Show loading state
-        const countElement = document.getElementById('visitor-count');
+    const countElement = document.getElementById('visitor-count');
+
+    // Show cached count immediately for instant perceived performance
+    const cachedCount = localStorage.getItem('visitorCount');
+    const cacheTimestamp = localStorage.getItem('visitorCountTimestamp');
+    const now = Date.now();
+
+    // Show cached count if it exists and is less than 5 minutes old
+    if (cachedCount && cacheTimestamp && (now - parseInt(cacheTimestamp)) < 300000) {
+        countElement.textContent = cachedCount;
+        countElement.style.opacity = '0.8'; // Slightly dimmed to indicate cached
+    } else {
         countElement.textContent = 'Loading...';
         countElement.style.opacity = '0.7';
+    }
 
-        // Call the API
+    try {
+        // Fetch real count from API
         const response = await fetch(API_ENDPOINT, {
             method: 'POST',
             headers: {
@@ -24,23 +35,37 @@ async function updateVisitorCount() {
         }
 
         const data = await response.json();
-
-        // Parse the nested response structure
         const bodyData = JSON.parse(data.body);
-        const count = bodyData.count;
+        const newCount = bodyData.count;
 
-        // Animate the counter update
-        animateCounter(0, count, 1500);
+        // Update cache
+        localStorage.setItem('visitorCount', newCount);
+        localStorage.setItem('visitorCountTimestamp', now.toString());
+
+        // Only animate if the count actually changed
+        const currentDisplayed = parseInt(countElement.textContent) || 0;
+        if (newCount !== currentDisplayed) {
+            animateCounter(currentDisplayed, newCount, 1000);
+        } else {
+            countElement.textContent = newCount;
+        }
+
         countElement.style.opacity = '1';
-
-        console.log(`Visitor count updated: ${count}`);
+        console.log(`Visitor count updated: ${newCount}`);
 
     } catch (error) {
         console.error('Error updating visitor count:', error);
-        const countElement = document.getElementById('visitor-count');
-        countElement.textContent = 'Error';
-        countElement.style.opacity = '0.8';
-        countElement.style.color = '#e74c3c';
+
+        // Fall back to cached count if API fails
+        if (cachedCount) {
+            countElement.textContent = cachedCount;
+            countElement.style.opacity = '0.8';
+            console.log('Using cached visitor count due to API error');
+        } else {
+            countElement.textContent = 'Error';
+            countElement.style.opacity = '0.8';
+            countElement.style.color = '#e74c3c';
+        }
     }
 }
 
